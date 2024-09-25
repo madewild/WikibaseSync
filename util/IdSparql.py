@@ -1,5 +1,6 @@
 # this class makes the correspondence between Wikidata entities and entities in the Wikibase using the external
 # identifier for Wikidata
+
 from SPARQLWrapper import SPARQLWrapper, JSON
 import configparser
 
@@ -45,21 +46,29 @@ class IdSparql:
             else:
                 print("This should not happen")
 
-    def get_id(self,id):
+    def get_id(self, id):
         if id.startswith("Q"):
-            return self.mapEntity[id]
+            try:
+                return self.mapEntity[id]
+            except KeyError:
+                print(self.mapEntity)
+                raise KeyError(f'Missing mapping for {id}')
         elif id.startswith("P"):
-            return self.mapProperty[id]
+            try:
+                return self.mapProperty[id]
+            except KeyError:
+                print(self.mapProperty)
+                raise KeyError(f'Missing mapping for {id}')
         else:
-            raise NameError('This should not happen')
+            raise NameError(f'ID does not start with either Q or P: {id}')
 
-    def save_id(self,id,new_id):
+    def save_id(self, id, new_id):
         if id.startswith("Q"):
             self.mapEntity[id] = str(new_id)
         elif id.startswith("P"):
             self.mapProperty[id] = str(new_id)
         else:
-            raise NameError('This should not happen')
+            raise NameError(f'ID does not start with either Q or P: {id}')
 
     def contains_id(self,id):
         if id.startswith("Q"):
@@ -67,4 +76,4 @@ class IdSparql:
         elif id.startswith("P"):
             return id in self.mapProperty
         else:
-            print('This should not happen')
+            print('Neither item nor property!')
