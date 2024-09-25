@@ -1,6 +1,8 @@
 import re
 from decimal import Decimal
 import json
+import sys
+
 import pywikibot
 from pywikibot.page import Claim
 import configparser
@@ -8,11 +10,14 @@ import configparser
 from util.IdSparql import IdSparql
 from util.PropertyWikidataIdentifier import PropertyWikidataIdentifier
 
-user_config = __import__("user-config")
+#user_config = __import__("user-config")
 
 languages = ["bg", "cs", "da", "de", "el", "en", "es", "et", "fi", "fr", "ga", "hr", "hu", "it", "lb", "lt", "lv", "mt",
              "nl", "pl", "pt", "ro", "sk", "sl", "sv", "tr"]
 
+# connect to wikidata
+wikidata = pywikibot.Site("wikidata", "wikidata")
+wikidata_repo = wikidata.data_repository()
 
 class WikibaseImporter:
     def __init__(self, wikibase_repo, wikidata_repo):
@@ -135,9 +140,8 @@ class WikibaseImporter:
                                         # accept remote update if the last update on the label was made by wikidata updater
                                         # leave current value if update was by a local user/admin
                                         # if last_update_revision_on_label["user"].lower() == self.appConfig.get('wikibase', 'user').lower():
-                                        if last_update_revision_on_label["user"].lower() == str(
-                                                user_config.usernames['my']['my']):
-                                            mylabels[label] = wikidata_item.labels.get(label)
+                                        # if last_update_revision_on_label["user"].lower() == str(user_config.usernames['sparqulb']['en']):
+                                        mylabels[label] = wikidata_item.labels.get(label)
                                 else:
                                     mylabels[label] = wikidata_item.labels.get(label)
                     else:
@@ -258,7 +262,6 @@ class WikibaseImporter:
                 print(e)
 
     def import_item(self, wikidata_item):
-        print("Import Entity", wikidata_item.getID() + " from Wikidata")
         wikibase_item = pywikibot.ItemPage(self.wikibase_repo)
         mylabels = self.diffLabels(wikidata_item, wikibase_item)
         myDescriptions = self.diff_descriptions(wikidata_item, wikibase_item)
@@ -277,21 +280,26 @@ class WikibaseImporter:
         }
         # print(data)
         try:
-            wikibase_item.editEntity(data, summary=u'Importing entity ' + wikidata_item.getID() + ' from wikidata')
+            wikibase_item.editEntity(data, summary=u'Importing entity ' + wikidata_item.getID() + ' from Wikidata')
             self.id.save_id(wikidata_item.getID(), wikibase_item.getID())
             return wikibase_item.getID()
         except pywikibot.exceptions.OtherPageSaveError as e:
-            print("Could not set description of ", wikibase_item.getID())
-            print("This is the error message ", e)
-            x = re.search(r'\[\[Item:.*\]\]', str(e))
+            print(f"Could not create a new item for {wikidata_item.getID()}")
+            x = re.findall(r'\[\[Item:.*\]\]', str(e))
             if x:
-                return x.group(0).replace("[[Item:", "").split("|")[0]
+                good_item =  x[-1].replace("[[Item:", "").split("|")[0]
+                if good_item == "-1]]": # missing data type:
+                    return None
+                else:
+                    print(f"Found {good_item} as likely existing match")
+                    self.id.save_id(wikidata_item.getID(), good_item)
+                    return good_item
             else:
-                print("This should not happen 5")
-            print("Error probably property or item already existing ", e)
+                print("Could not find item in error message")
+            print("Error: item already exists but could not be matched ", e)
 
     def importProperty(self, wikidata_item):
-        print("Import Property", wikidata_item.getID() + " from Wikidata")
+        print(f"Importing Property {wikidata_item.getID()} from Wikidata")
         wikibase_item = pywikibot.PropertyPage(self.wikibase_repo, datatype=wikidata_item.type)
         mylabels = self.diffLabels(wikidata_item, wikibase_item)
         myDescriptions = self.diff_descriptions(wikidata_item, wikibase_item)
@@ -307,19 +315,23 @@ class WikibaseImporter:
             'claims': [claim.toJSON()]
         }
         try:
-            wikibase_item.editEntity(data,
-                                     summary=u'Importing property ' + wikidata_item.getID() + ' from wikidata')
+            wikibase_item.editEntity(data, summary=u'Importing property ' + wikidata_item.getID() + ' from Wikidata')
             self.id.save_id(wikidata_item.getID(), wikibase_item.getID())
             return wikibase_item.getID()
         except pywikibot.exceptions.OtherPageSaveError as e:
-            print("Could not set description of ", wikibase_item.getID())
-            print(e)
-            x = re.search(r'\[\[Item:.*\]\]', str(e))
+            print(f"Could not create a new property for {wikidata_item.getID()}")
+            x = re.findall(r'\[\[Property:.*\]\]', str(e))
             if x:
-                return x.group(0).replace("[[Item:", "").split("|")[0]
+                good_prop = x[-1].replace("[[Property:", "").split("|")[0]
+                if good_prop == "-1]]": # missing data type:
+                    return None
+                else: 
+                    print(f"Found {good_prop} as likely existing match")
+                    self.id.save_id(wikidata_item.getID(), good_prop)
+                    return good_prop
             else:
-                print("This should not happen 6")
-            print("Error probably property or item already existing ", e)
+                print("Could not find property in error message")
+            print("Error: property already exists but could not be matched ", e)
 
     # comparing two claims
     def compare_claim(self, wikidata_claim, wikibase_claim, translate):
@@ -330,6 +342,7 @@ class WikibaseImporter:
         if ((translate == True and self.id.get_id(wikidata_propertyId) == wikibase_propertyId) or (
                 translate == False and wikidata_propertyId == wikibase_propertyId)):
             found = True
+            #print(f"Found potential duplicate: {wikibase_claim}")
             if wikidata_claim.get('snaktype') == 'somevalue' and wikibase_claim.get('snaktype') == 'somevalue':
                 found_equal_value = True
             elif wikidata_claim.get('snaktype') == 'novalue' and wikibase_claim.get('snaktype') == 'novalue':
@@ -342,12 +355,15 @@ class WikibaseImporter:
                             wikidata_claim.get('datavalue').get('value').get('numeric-id'))
                         wikibase_objectId = 'Q' + str(
                             wikibase_claim.get('datavalue').get('value').get('numeric-id'))
-                        # print(self.id.get_id(wikidata_propertyId),"---", wikibase_propertyId)
-                        # print(self.id.get_id(wikidata_objectId),"---",wikibase_objectId)
+                        #print(self.id.get_id(wikidata_propertyId),"---", wikibase_propertyId)
+                        if not self.id.contains_id(wikidata_objectId):
+                            wikidata_item = pywikibot.ItemPage(wikidata_repo, wikidata_objectId)
+                            self.import_item(wikidata_item)
+                        #print(self.id.get_id(wikidata_objectId),"---",wikibase_objectId)
                         if translate:
-                            if self.id.contains_id(wikidata_objectId) and self.id.get_id(
-                                    wikidata_objectId) == wikibase_objectId:
+                            if self.id.contains_id(wikidata_objectId) and self.id.get_id(wikidata_objectId) == wikibase_objectId:
                                 found_equal_value = True
+                                print("Duplicate claim found")
                         else:
                             if wikidata_objectId == wikibase_objectId:
                                 found_equal_value = True
@@ -953,10 +969,10 @@ class WikibaseImporter:
             if k == 0:
                 return True
             else:
-                if revisions[k - 1]["user"].lower() != str(user_config.usernames['my']['my']).lower():
-                    return False
-                else:
-                    return True
+                #if revisions[k - 1]["user"].lower() != str(user_config.usernames['sparqulb']['en']).lower():
+                #    return False
+                #else:
+                return True
         else:
             return True
 
@@ -1016,14 +1032,14 @@ class WikibaseImporter:
         # if only the wikidata updater made changes then it is for sure a deletion in wikidata
         for revision in revisions:
             # print(revision['user'])
-            if revision['user'].lower() != str(user_config.usernames['my']['my']).lower():
-                is_only_wikidata_updater_user = False
-                break
+            #if revision['user'].lower() != str(user_config.usernames['sparqulb']['en']).lower():
+            is_only_wikidata_updater_user = True
+            break
         # print("is_only_wikidata_updater_user",is_only_wikidata_updater_user)
         claims_found_in_revisions = []
-        print(len(claims_to_remove))
+        #print(len(claims_to_remove))
         if not is_only_wikidata_updater_user:
-            for i in range(0, len(claims_to_remove)):
+            for i, _ in enumerate(claims_to_remove):
                 claimToRemove = claims_to_remove[i]
                 # print("CHECKING CLAIM ",claimToRemove, "---", claim_more_accurate[i],"---", revisions)
                 # go through the history and find the edit where it was added and the user that made that edit
@@ -1055,7 +1071,7 @@ class WikibaseImporter:
                         not_remove.append(claimToRemove)
         for c in not_remove:
             claims_to_remove.remove(c)
-        print("claimsToRemove ", claims_to_remove)
+        #print("claimsToRemove ", claims_to_remove)
         if len(claims_to_remove) > 0:
             for claimsToRemoveChunk in chunks(claims_to_remove, 50):
                 wikibase_item.get()
@@ -1074,19 +1090,23 @@ class WikibaseImporter:
                 wikidata_claim = c.toJSON()
                 found_equal_value = False
                 wikidata_property_id = wikidata_claim.get('mainsnak').get('property')
-                print(wikidata_property_id)
+                print(f"\nCheking property {wikidata_property_id}")
+                #print(f"Wikidata claim: {wikidata_claim}")
                 if wikibase_item.getID().startswith("Q") or wikibase_item.getID().startswith("P"):
                     for wikibase_claims in wikibase_item.claims:
                         for wikibase_c in wikibase_item.claims.get(wikibase_claims):
                             wikibase_claim = wikibase_c.toJSON()
+                            wikidata_property = pywikibot.PropertyPage(wikidata_repo, wikidata_property_id)
+                            if not self.id.contains_id(wikidata_property_id):
+                                self.importProperty(wikidata_property)
                             if self.id.contains_id(wikidata_property_id):
-                                (claim_found, claim_found_equal_value,
-                                 more_accurate) = self.compare_claim_with_qualifiers_and_references(wikidata_claim,
-                                                                                                    wikibase_claim,
-                                                                                                    True)
+                                (_, claim_found_equal_value, _) = self.compare_claim_with_qualifiers_and_references(wikidata_claim, wikibase_claim, True)
                                 if (claim_found_equal_value == True):
                                     found_equal_value = True
-                    print(found_equal_value)
+                            else:
+                                print(f"Property {wikidata_property_id} has no equivalent in Wikibase")
+                                sys.exit()
+                    #print(found_equal_value)
                     if found_equal_value == False:
                         # print("This claim is added ", wikidata_claim)
                         # import the property if it does not exist
@@ -1135,9 +1155,8 @@ class WikibaseImporter:
                 data = {}
                 data['claims'] = claimsToAdd
                 try:
-                    wikibase_item.editEntity(data,
-                                             summary="Adding these statements since they where added in Wikidata")
-                except (pywikibot.data.api.APIError, pywikibot.exceptions.OtherPageSaveError) as e:
+                    wikibase_item.editEntity(data, summary="Adding statements added in Wikidata")
+                except (pywikibot.exceptions.OtherPageSaveError) as e:
                     print(e)
 
     def wikidata_link(self, wikibase_item, wikidata_item):
@@ -1157,12 +1176,12 @@ class WikibaseImporter:
             wikibase_item.addClaim(claim)
 
     def change_item(self, wikidata_item, wikibase_repo, statements):
+        """Change item"""
         try:
             item = wikidata_item.get()
         except pywikibot.exceptions.UnknownSite as e:
             print("There is a problem fetching an entity, this should ideally not occur")
             return
-        print("Change Entity ", wikidata_item.getID())
         if not self.id.contains_id(wikidata_item.getID()):
             new_id = self.import_item(wikidata_item)
             wikibase_item = pywikibot.ItemPage(wikibase_repo, new_id)
@@ -1176,7 +1195,7 @@ class WikibaseImporter:
             self.change_descriptions(wikidata_item, wikibase_item)
             self.wikidata_link(wikibase_item, wikidata_item)
         if statements:
-            self.change_site_links(wikidata_item, wikibase_item)
+            #self.change_site_links(wikidata_item, wikibase_item)
             self.change_claims(wikidata_item, wikibase_item)
         return wikibase_item
 
