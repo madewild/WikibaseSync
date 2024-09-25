@@ -4,7 +4,7 @@ import sys
 import pywikibot
 
 # connect to the wikibase
-wikibase = pywikibot.Site("my", "my")
+wikibase = pywikibot.Site("en", "sparqulb")
 wikibase_repo = wikibase.data_repository()
 wikibase_repo.login()
 
@@ -18,12 +18,10 @@ wikibase_importer = WikibaseImporter(wikibase_repo, wikidata_repo)
 
 # import a single item or property
 arg = sys.argv[1]
-print(f"Importing {arg}")
+print(f"Importing {arg} from Wikidata...")
 if arg.startswith("Q"):
-    print("before get")
     wikidata_item = pywikibot.ItemPage(wikidata_repo, arg)
     wikidata_item.get()
-    print("after get")
     wikibase_importer.change_item(wikidata_item, wikibase_repo, True)
 elif arg.startswith("P"):
     wikidata_property = pywikibot.PropertyPage(wikidata_repo, arg)
