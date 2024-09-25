@@ -11,3 +11,4 @@ venv
 src/
 apicache/
 *.lwp
+user-password.py
