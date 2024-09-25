@@ -1,4 +1,5 @@
-# configuration for pywikibot
+# Importing one item or property from Wikidata
+
 import sys
 
 import pywikibot
@@ -16,7 +17,6 @@ from util.util import WikibaseImporter
 
 wikibase_importer = WikibaseImporter(wikibase_repo, wikidata_repo)
 
-# import a single item or property
 arg = sys.argv[1]
 print(f"Importing {arg} from Wikidata...")
 if arg.startswith("Q"):
