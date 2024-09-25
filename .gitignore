@@ -9,3 +9,5 @@ venv
 *log*
 *sh
 src/
+apicache/
+*.lwp
