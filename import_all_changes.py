@@ -17,7 +17,7 @@ if not os.path.isfile(familyfile):
   print ("family file %s is missing" % (familyfile))
 config2.register_family_file(family, familyfile)
 config2.password_file = "user-password.py"
-config2.usernames['my']['my'] = app_config.get('wikibase', 'user')
+config2.usernames['sparqulb']['en'] = app_config.get('wikibase', 'user')
 
 #connect to the wikibase
 wikibase = pywikibot.Site("my", "my")
