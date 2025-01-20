@@ -53,3 +53,10 @@ Define the Wikibase properties in this file.
  - `python import_one.py P31` to import P31 from Wikidata (if already imported the entity will be put in sync)
  - `python import_all_changes.py` to sync all currently imported items
  - `python import_recent_changes.py` to sync all entities that where changed in Wikidata (calling this regularly allows to maintain all instances and properties in sync with Wikidata) 
+
+ ## Note
+ Comment out this section in _wbtypes.py if issues with globes after Python upgrade:
+
+ ```if data['globe']:
+globes = {entity: name for name, entity in site.globes().items()}
+globe = globes.get(data['globe'])```
